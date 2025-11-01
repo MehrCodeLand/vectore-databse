@@ -11,23 +11,30 @@ COLLECTION_NAME = "words"
 client = QdrantClient(QDRANT_URL)
 
 
-def setup_qdrant(size : int = 384 ):
+def setup_qdrant(size: int = 384):
     try:
-
-        client.recreate_collection(
-            collection_name=COLLECTION_NAME,
-            vectors_config=models.VectorParams(
-                size=size,
-                distance=models.Distance.COSINE
+        # Check if collection exists
+        collections = client.get_collections().collections
+        collection_exists = any(c.name == COLLECTION_NAME for c in collections)
+        
+        if not collection_exists:
+            # Only create if it doesn't exist
+            client.create_collection(
+                collection_name=COLLECTION_NAME,
+                vectors_config=models.VectorParams(
+                    size=size,
+                    distance=models.Distance.COSINE
+                )
             )
-        )
+            logger.info(f"Collection '{COLLECTION_NAME}' created successfully")
+        else:
+            logger.info(f"Collection '{COLLECTION_NAME}' already exists, skipping creation")
+    
+    except Exception as e:
+        logger.error(f"Issues in setup_qdrant: {e}")
 
-        logger.info(f"Dabase create from  setup_drant")
 
-    except Exception as e :
-        logger.info(f" we have issues setup_drant {e}")
-
-
+    
 def insert_word(vector, payload):
     try: 
         client.upsert(

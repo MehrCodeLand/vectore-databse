@@ -1,8 +1,10 @@
-from fastapi import APIRouter
+from fastapi import APIRouter , Query
 from models.schemas import WordItem , SearchQuery
 from core.qdrant_client import insert_word , search_similar
 from core.embeddings import get_vector
 from loguru import logger
+from qdrant_client.http import models
+
 
 router = APIRouter()
 
@@ -44,3 +46,38 @@ def search_word(query : SearchQuery):
     except Exception as e :
         logger.info(f"we have issues in search word {e}")
         return None 
+
+
+@router.get("/search_by_meaning")
+def search_by_meaning(text: str = Query(..., description="Meaning or definition to search"), limit: int = 5):
+    query_vector = get_vector(text)
+    results = search_similar(query_vector, limit)
+    return [
+        {
+            "word": r.payload["word"],
+            "score": round(r.score, 3),
+            "meaning": r.payload.get("meaning"),
+            "synonyms": r.payload.get("synonyms"),
+        }
+        for r in results
+    ]
+
+
+@router.get("/search_metadata")
+def search_metadata(keyword: str, limit: int = 5):
+    # basic text filter using Qdrant’s metadata filtering
+    from core.qdrant_client import client, COLLECTION_NAME
+    filter_ = models.Filter(
+        must=[models.FieldCondition(key="meaning", match=models.MatchText(text=keyword))]
+    )
+    results = client.scroll(collection_name=COLLECTION_NAME, scroll_filter=filter_, limit=limit)
+    points, _ = results
+    return [
+        {
+            "word": p.payload["word"],
+            "meaning": p.payload.get("meaning"),
+            "synonyms": p.payload.get("synonyms"),
+        }
+        for p in points
+    ]
+
